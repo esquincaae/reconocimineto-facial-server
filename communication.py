@@ -1,48 +1,60 @@
-from flask import Flask, render_template
-from flask_socketio import SocketIO
+from flask import Flask
+from flask_socketio import SocketIO, emit
 import numpy as np
 import cv2
 import base64
-import detect_faces_script
+import face_recognition
 
 app = Flask(__name__)
-socketio = SocketIO(app)
+socketio = SocketIO(app, cors_allowed_origins="*")
 
 @app.route('/')
 def index():
-    # Mensaje al cargar la página principal y establecer la conexión WebSocket
-    print("Cargando la página principal y esperando conexiones...")
-    return render_template('index.html')
+    return "El servidor de detección de rostros está corriendo."
+
+def detect_faces_in_frame(img):
+    # Detecta los rostros en la imagen
+    face_locations = face_recognition.face_locations(img)
+    
+    # Dibuja los recuadros alrededor de los rostros detectados
+    for top, right, bottom, left in face_locations:
+        cv2.rectangle(img, (left, top), (right, bottom), (0, 255, 0), 2)
+
+    return img, face_locations
 
 @socketio.on('connect')
 def handle_connect():
-    # Mensaje cuando un cliente se conecta
     print("Un cliente se ha conectado.")
 
 @socketio.on('disconnect')
 def handle_disconnect():
-    # Mensaje cuando un cliente se desconecta
     print("Un cliente se ha desconectado.")
 
 @socketio.on('frame')
 def handle_frame(data):
-    # Mensaje al recibir un cuadro de video
     print("Recibiendo cuadro de video para procesamiento...")
+    try:
+        frame = data['image']
+        if not frame.startswith('data:image/jpeg;base64,'):
+            raise ValueError("Formato de imagen no esperado")
+        
+        # Elimina el prefijo y decodifica la imagen
+        frame = frame.split(",")[1]
+        frame = base64.b64decode(frame)
+        nparr = np.frombuffer(frame, np.uint8)
+        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
 
-    # Decodificar y procesar el cuadro
-    frame = data['image']
-    frame = base64.b64decode(frame)
-    nparr = np.frombuffer(frame, np.uint8)
-    img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        processed_img, face_locations = detect_faces_in_frame(img)
 
-    # Llamar al script de detección de rostros (modifica esta función según necesidad)
-    detect_faces_script.detect_faces_in_frame(img)
+        # Codifica la imagen procesada para enviarla de vuelta
+        _, buffer = cv2.imencode('.jpg', processed_img)
+        encoded_image = base64.b64encode(buffer).decode('utf-8')
 
-    # Mensaje después de procesar el cuadro
-    print("Cuadro procesado. Detectando rostros...")
-
-    # Si necesitas enviar información de vuelta al cliente
-    # emit('response', {'data': 'Respuesta procesada'})
+        print("Procesamiento completado. Enviando respuesta...")
+        emit('response', {'image': encoded_image, 'face_locations': str(face_locations)})
+    except Exception as e:
+        print(f"Error procesando el cuadro: {str(e)}")
+        emit('error', {'error': str(e)})
 
 if __name__ == '__main__':
-    socketio.run(app, host='0.0.0.0', debug=True)
+    socketio.run(app, debug=True, host='0.0.0.0')

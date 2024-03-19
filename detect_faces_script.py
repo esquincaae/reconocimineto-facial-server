@@ -1,18 +1,13 @@
-# Requiere la instalación de la biblioteca: pip install face_recognition
-import face_recognition
 import cv2
+import face_recognition
 
-def detect_faces(image_path):
-    # Cargar la imagen y encontrar las ubicaciones de los rostros
-    image = face_recognition.load_image_file(image_path)
-    face_locations = face_recognition.face_locations(image)
+def detect_faces_in_frame(img):
+    # Detecta los rostros en la imagen
+    face_locations = face_recognition.face_locations(img)
 
-    # Cargar la imagen con OpenCV para dibujar los cuadros
-    image_cv = cv2.imread(image_path)
-
-    # Dibujar los cuadros alrededor de cada rostro
+    # Dibuja los recuadros alrededor de los rostros detectados
     for top, right, bottom, left in face_locations:
-        cv2.rectangle(image_cv, (left, top), (right, bottom), (0, 0, 255), 2)
+        cv2.rectangle(img, (left, top), (right, bottom), (0, 255, 0), 2)
 
-    # Guardar la imagen
-    cv2.imwrite('output.jpg', image_cv)
+    # Retorna la imagen con los recuadros dibujados
+    return img
